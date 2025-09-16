@@ -1,0 +1,23 @@
+name: 'Code-Turtle Indexer'
+description: 'Indexes the codebase for AI-powered code reviews.'
+author: 'Richard Joseph'
+
+inputs:
+  pinecone_api_key:
+    description: 'API key for Pinecone vector database.'
+    required: true
+  pinecone_environment:
+    description: 'Environment for your Pinecone index.'
+    required: true
+  scan_path:
+    description: 'The path to the directory to be scanned and indexed.'
+    required: false
+    default: '.'
+
+runs:
+  using: 'docker'
+  image: 'docker://richardjoseph1/code-turtle-indexer:latest'
+  env:
+    PINECONE_API_KEY: ${{ inputs.pinecone_api_key }}
+    PINECONE_ENVIRONMENT: ${{ inputs.pinecone_environment }}
+    SCAN_PATH: ${{ inputs.scan_path }}
