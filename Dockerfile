@@ -36,15 +36,18 @@ LABEL author="Richard Joseph" \
 RUN useradd --create-home --shell /bin/bash appuser
 
 # Copy the virtual env from the builder stage.
-# This brings in all dependencies without the massive GPU libraries.
 COPY --from=builder /opt/venv /opt/venv
 
 # Copy only the application script, and set correct ownership
 COPY --chown=appuser:appuser scripts/indexer.py /home/appuser/indexer.py
 
-# Set environment variables and path to use the virtual env
+# --- THIS IS THE FIX ---
+# Set environment variables, including redirecting the Hugging Face cache
 ENV PYTHONUNBUFFERED=1 \
-    VIRTUAL_ENV=/opt/venv
+    VIRTUAL_ENV=/opt/venv \
+    HF_HOME=/home/appuser/.cache/huggingface
+# ----------------------
+
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Switch to the non-root user
