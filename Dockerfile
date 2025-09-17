@@ -1,14 +1,17 @@
-# Dockerfile
-
 # --- Stage 1: The Builder ---
-# This stage installs all dependencies, including build-time tools.
+# This stage installs all dependencies in a contained environment.
 FROM python:3.11-slim-bookworm AS builder
 
 LABEL stage="builder"
 
-# Set environment variables for a clean build
+# Set environment variables for a clean build and to use a virtual env
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=off
+    PIP_NO_CACHE_DIR=off \
+    VIRTUAL_ENV=/opt/venv
+
+# Set up the virtual environment
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Install build-essential for C extensions (like in tree-sitter)
 # and clean up apt cache in the same layer to reduce size.
@@ -18,36 +21,39 @@ RUN apt-get update \
 
 # Copy only the requirements file to leverage Docker's layer caching.
 WORKDIR /app
-# CORRECTED PATH: Copy requirements.txt from the scripts directory.
 COPY scripts/requirements.txt .
 
-# Install Python dependencies. They are installed into the system's Python site-packages.
+# Install Python dependencies into the virtual environment
 RUN pip install -r requirements.txt
 
 
 # --- Stage 2: The Final Image ---
-# This stage is a clean runtime environment. It copies only what's needed
-# from the builder stage, resulting in a smaller and more secure final image.
+# This stage is a clean, secure runtime environment.
 FROM python:3.11-slim-bookworm
 
-# Add metadata labels for maintainability.
-LABEL author="Richard Joseph"
-LABEL description="Docker image for the Code-Turtle Indexer GitHub Action."
+LABEL author="Richard Joseph" \
+      description="Docker image for the Code-Turtle Indexer GitHub Action."
 
-# Set environment variable for Python.
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/venv
 
-# Copy the installed Python packages from the builder stage.
-# This brings in all the dependencies without the build tools (like gcc).
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy the virtual env from the builder stage.
+# This brings in all dependencies without build tools like gcc.
+COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
+
+# Make the virtual env's python the default
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Create a non-root user for security
+RUN useradd --create-home --shell /bin/bash appuser
+USER appuser
 
 # Copy the application code into the image.
-COPY scripts/ /scripts/
+WORKDIR /home/appuser/app
+COPY scripts/ ./scripts/
 
-# Set the working directory for the action. /github/workspace is the
-# standard location where the repository is checked out.
+# Set the working directory for the action, where the repo is checked out.
 WORKDIR /github/workspace
 
-# Define the entrypoint for the container. This is the command that will run.
-ENTRYPOINT ["python", "/scripts/indexer.py"]
+# Define the entrypoint for the container.
+ENTRYPOINT ["python", "/home/appuser/app/scripts/indexer.py"]
